@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  --surface: #ffffff; --canvas: #f6f7f9; --ink: #15181d; --ink-soft: #626a78;
+  --line: #e2e5ea; --brand: #1f5fd6; --brand-soft: #eaf1ff;
+  --ok: #0f7b4f; --ok-soft: #e6f6ee; --warn: #9a6200; --warn-soft: #fff4e0;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #171a1f; --canvas: #0e1014; --ink: #f0f2f5; --ink-soft: #9aa2b1;
+    --line: #2a2f38; --brand: #6f9bff; --brand-soft: #1a2341;
+    --ok: #4ad08c; --ok-soft: #10301f; --warn: #e0a344; --warn-soft: #332508;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --surface: #171a1f; --canvas: #0e1014; --ink: #f0f2f5; --ink-soft: #9aa2b1;
+  --line: #2a2f38; --brand: #6f9bff; --brand-soft: #1a2341;
+  --ok: #4ad08c; --ok-soft: #10301f; --warn: #e0a344; --warn-soft: #332508;
+  color-scheme: dark;
+}
+
+html, body { background: var(--canvas); color: var(--ink); height: 100%; }
+body {
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.btn { border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 700; color: #fff; background: var(--brand); cursor: pointer; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.sel {
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
+  font-size: 13px; background: var(--surface); color: var(--ink); outline: none;
+  /* flex 안에서 select는 가장 긴 option 길이만큼 벌어져 좁은 화면을 밀어낸다.
+     min-width:0 이 있어야 축소가 허용된다. */
+  max-width: 100%; min-width: 0;
+}
+.sel:focus { border-color: var(--brand); }
+.num { font-variant-numeric: tabular-nums; }
+.bubble { border-radius: 12px; padding: 10px 13px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+.bubble-user { background: var(--brand-soft); }
+.bubble-ai { background: var(--surface); border: 1px solid var(--line); }
+.chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+.chip-warn { background: var(--warn-soft); color: var(--warn); }
+.chip-ok { background: var(--ok-soft); color: var(--ok); }

@@ -1,0 +1,29 @@
+{
+  "name": "llm-board",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude · GPT · Gemini를 한 화면에서 쓰면서 비용을 원화로 실시간 확인하는 개인용 LLM 보드",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/pricing.test.mjs && node scripts/stream.test.mjs",
+    "pretest": "tsc src/lib/pricing.ts src/lib/providers.ts --outDir .t --module esnext --target ES2022 --moduleResolution bundler --skipLibCheck",
+    "posttest": "rm -rf .t"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
+    "next": "16.4.3",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.13",
+    "@types/node": "22.15.3",
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "tailwindcss": "4.1.13",
+    "typescript": "5.8.3"
+  }
+}
