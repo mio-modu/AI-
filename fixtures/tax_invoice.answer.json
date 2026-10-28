@@ -1,0 +1,15 @@
+{
+  "_설명": "fixtures/tax_invoice.png의 정답. 추출 정확도 측정의 기준값이며 손으로 입력했다.",
+  "docType": "세금계산서",
+  "issueDate": "2026-09-30",
+  "supplier": { "regNo": "261-13-02753", "name": "루메인", "ceo": "박성은" },
+  "buyer": { "regNo": "220-81-62517", "name": "주식회사 대한상사", "ceo": "김영호" },
+  "supplyAmount": 12850000,
+  "taxAmount": 1285000,
+  "totalAmount": 14135000,
+  "items": [
+    { "name": "AI 헤어스타일 미리보기 SaaS 구축", "qty": 1, "unitPrice": 8500000, "supplyAmount": 8500000, "taxAmount": 850000 },
+    { "name": "ERP 전표 연동 모듈 개발", "qty": 1, "unitPrice": 3200000, "supplyAmount": 3200000, "taxAmount": 320000 },
+    { "name": "유지보수 (9월분)", "qty": 1, "unitPrice": 1150000, "supplyAmount": 1150000, "taxAmount": 115000 }
+  ]
+}

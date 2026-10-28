@@ -1,0 +1,136 @@
+{
+  "type": "object",
+  "properties": {
+    "docType": {
+      "type": "string",
+      "enum": [
+        "세금계산서",
+        "거래명세서",
+        "발주서",
+        "영수증",
+        "기타"
+      ]
+    },
+    "issueDate": {
+      "type": "string",
+      "description": "작성일자. YYYY-MM-DD 형식으로 변환"
+    },
+    "supplier": {
+      "type": "object",
+      "properties": {
+        "regNo": {
+          "type": "string",
+          "description": "사업자등록번호. 000-00-00000 형식"
+        },
+        "name": {
+          "type": "string",
+          "description": "상호"
+        },
+        "ceo": {
+          "type": "string",
+          "description": "대표자 성명"
+        },
+        "bizType": {
+          "type": "string",
+          "description": "업태 / 종목"
+        }
+      },
+      "required": [
+        "regNo",
+        "name"
+      ]
+    },
+    "buyer": {
+      "type": "object",
+      "properties": {
+        "regNo": {
+          "type": "string",
+          "description": "사업자등록번호. 000-00-00000 형식"
+        },
+        "name": {
+          "type": "string",
+          "description": "상호"
+        },
+        "ceo": {
+          "type": "string",
+          "description": "대표자 성명"
+        },
+        "bizType": {
+          "type": "string",
+          "description": "업태 / 종목"
+        }
+      },
+      "required": [
+        "regNo",
+        "name"
+      ]
+    },
+    "supplyAmount": {
+      "type": "number",
+      "description": "공급가액 합계. 쉼표 없는 숫자"
+    },
+    "taxAmount": {
+      "type": "number",
+      "description": "세액 합계. 쉼표 없는 숫자"
+    },
+    "totalAmount": {
+      "type": "number",
+      "description": "합계금액. 쉼표 없는 숫자"
+    },
+    "items": {
+      "type": "array",
+      "description": "품목 표의 각 행",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "월일"
+          },
+          "name": {
+            "type": "string",
+            "description": "품목명"
+          },
+          "spec": {
+            "type": "string",
+            "description": "규격"
+          },
+          "qty": {
+            "type": "number",
+            "description": "수량"
+          },
+          "unitPrice": {
+            "type": "number",
+            "description": "단가"
+          },
+          "supplyAmount": {
+            "type": "number",
+            "description": "공급가액"
+          },
+          "taxAmount": {
+            "type": "number",
+            "description": "세액"
+          }
+        },
+        "required": [
+          "name",
+          "supplyAmount"
+        ]
+      }
+    },
+    "note": {
+      "type": "string",
+      "description": "비고"
+    }
+  },
+  "required": [
+    "docType",
+    "issueDate",
+    "supplier",
+    "buyer",
+    "supplyAmount",
+    "taxAmount",
+    "totalAmount",
+    "items"
+  ]
+}

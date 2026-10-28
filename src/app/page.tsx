@@ -1,229 +1,257 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import OptionGrid from "@/components/OptionGrid";
-import Uploader, { type UploadedImage } from "@/components/Uploader";
-import ResultGallery, { type ResultImage, type ResultMeta } from "@/components/ResultGallery";
-import {
-  ASPECT_RATIOS,
-  CATEGORIES,
-  IMAGE_SIZES,
-  MODELS,
-  POSES,
-  QUALITY_TIERS,
-  SCENES,
-} from "@/lib/presets";
+import { useCallback, useMemo, useRef, useState } from "react";
+import VoucherCard, { type Row } from "@/components/VoucherCard";
+import type { Voucher } from "@/lib/schema";
+import { validateVoucher, VERDICT_LABEL } from "@/lib/validate";
+import { vouchersToCsv } from "@/lib/csv";
+
+const MAX_FILES = 20;
+const MAX_BYTES = 10 * 1024 * 1024;
 
 export default function Home() {
-  const [images, setImages] = useState<UploadedImage[]>([]);
-  const [categoryId, setCategoryId] = useState(CATEGORIES[0].id);
-  const [modelId, setModelId] = useState(MODELS[0].id);
-  const [sceneId, setSceneId] = useState(SCENES[0].id);
-  const [poseId, setPoseId] = useState(POSES[1].id);
-  const [aspectRatio, setAspectRatio] = useState<string>(ASPECT_RATIOS[0].id);
-  const [quality, setQuality] = useState<string>(QUALITY_TIERS[0].id);
-  const [imageSize, setImageSize] = useState<string>("2K");
-  const [variations, setVariations] = useState(2);
-  const [extra, setExtra] = useState("");
+  const [rows, setRows] = useState<Row[]>([]);
+  const [tier, setTier] = useState<"fast" | "accurate">("fast");
+  const [running, setRunning] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<ResultImage[]>([]);
-  const [meta, setMeta] = useState<ResultMeta | null>(null);
-  const [prompt, setPrompt] = useState<string | null>(null);
+  const summary = useMemo(() => {
+    const done = rows.filter((r) => r.status === "done");
+    return {
+      total: rows.length,
+      auto: done.filter((r) => r.verdict === "auto").length,
+      review: done.filter((r) => r.verdict === "review").length,
+      reject: done.filter((r) => r.verdict === "reject").length,
+      failed: rows.filter((r) => r.status === "error").length,
+    };
+  }, [rows]);
 
-  const tier = useMemo(
-    () => QUALITY_TIERS.find((t) => t.id === quality) ?? QUALITY_TIERS[0],
-    [quality],
-  );
-  const availableSizes = useMemo(
-    () => IMAGE_SIZES.filter((s) => (tier.sizes as readonly string[]).includes(s.id)),
-    [tier],
-  );
+  const addFiles = useCallback(async (files: FileList | null) => {
+    if (!files?.length) return;
+    setNotice(null);
 
-  // 고품질 티어에서만 쓰던 4K로 둔 채 빠름으로 내려오면 선택값이 티어 밖으로 벗어난다.
-  const effectiveSize = (tier.sizes as readonly string[]).includes(imageSize)
-    ? imageSize
-    : tier.sizes[tier.sizes.length - 1];
+    const room = MAX_FILES - rows.length;
+    if (room <= 0) {
+      setNotice(`한 번에 최대 ${MAX_FILES}건까지 처리합니다.`);
+      return;
+    }
 
-  const canGenerate = images.length > 0 && !loading;
+    const next: Row[] = [];
+    for (const file of Array.from(files).slice(0, room)) {
+      if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+        setNotice(`${file.name} — 이미지 또는 PDF만 올릴 수 있습니다.`);
+        continue;
+      }
+      if (file.size > MAX_BYTES) {
+        setNotice(`${file.name} — 10MB를 넘어 제외했습니다.`);
+        continue;
+      }
+      const dataUrl = await readDataUrl(file);
+      next.push({
+        id: crypto.randomUUID(),
+        fileName: file.name,
+        previewUrl: dataUrl,
+        status: "pending",
+      });
+    }
+    if (next.length) setRows((prev) => [...prev, ...next]);
+  }, [rows.length]);
 
-  async function handleGenerate() {
-    if (!canGenerate) return;
-    setLoading(true);
-    setError(null);
+  async function runAll() {
+    const targets = rows.filter((r) => r.status === "pending" || r.status === "error");
+    if (!targets.length) return;
+    setRunning(true);
 
+    // 전표는 서로 독립이지만 한꺼번에 던지면 한도에 걸린다. 3건씩 끊어서 보낸다.
+    const CONCURRENCY = 3;
+    for (let i = 0; i < targets.length; i += CONCURRENCY) {
+      const batch = targets.slice(i, i + CONCURRENCY);
+      setRows((prev) =>
+        prev.map((r) => (batch.some((b) => b.id === r.id) ? { ...r, status: "working" } : r)),
+      );
+      await Promise.all(batch.map((r) => runOne(r)));
+    }
+    setRunning(false);
+  }
+
+  async function runOne(row: Row) {
+    const comma = row.previewUrl.indexOf(",");
+    const mimeType = row.previewUrl.slice(5, row.previewUrl.indexOf(";"));
     try {
-      const res = await fetch("/api/generate", {
+      const res = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          categoryId,
-          modelId,
-          sceneId,
-          poseId,
-          extra,
-          quality,
-          aspectRatio,
-          imageSize: effectiveSize,
-          variations,
-          references: images.map((i) => ({ mimeType: i.mimeType, data: i.data })),
-        }),
+        body: JSON.stringify({ mimeType, data: row.previewUrl.slice(comma + 1), tier }),
       });
-
       const body = await res.json();
       if (!res.ok) {
-        setError(body?.error ?? "생성에 실패했습니다.");
+        patch(row.id, { status: "error", error: body?.error ?? "판독에 실패했습니다." });
         return;
       }
-
-      setResults(body.images ?? []);
-      setMeta(body.meta ?? null);
-      setPrompt(body.prompt ?? null);
+      patch(row.id, {
+        status: "done",
+        voucher: body.voucher,
+        verdict: body.validation?.verdict,
+        verdictLabel: body.validation?.verdictLabel,
+        findings: body.validation?.findings ?? [],
+        error: undefined,
+      });
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해 주세요.");
-    } finally {
-      setLoading(false);
+      patch(row.id, { status: "error", error: "네트워크 오류가 발생했습니다." });
     }
   }
 
+  const patch = (id: string, p: Partial<Row>) =>
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...p } : r)));
+
+  /** 담당자가 값을 고치면 즉시 다시 검증한다 — 고쳤는데 판정이 그대로면 믿을 수 없다. */
+  function handleEdit(id: string, voucher: Voucher) {
+    const result = validateVoucher(voucher);
+    patch(id, {
+      voucher,
+      verdict: result.verdict,
+      verdictLabel: VERDICT_LABEL[result.verdict],
+      findings: result.findings,
+    });
+  }
+
+  function downloadCsv() {
+    const done = rows.filter((r) => r.status === "done" && r.voucher);
+    if (!done.length) return;
+    const csv = vouchersToCsv(
+      done.map((r) => ({ voucher: r.voucher!, verdictLabel: r.verdictLabel ?? "" })),
+    );
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `전표_${stamp()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const pending = rows.some((r) => r.status === "pending" || r.status === "error");
+  const anyDone = rows.some((r) => r.status === "done");
+
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-      <header className="mb-7">
-        <h1 className="text-[22px] font-extrabold tracking-tight sm:text-[26px]">착용컷 생성기</h1>
+    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+      <header className="mb-6">
+        <h1 className="text-[22px] font-extrabold tracking-tight sm:text-[25px]">전표리더</h1>
         <p className="mt-1.5 text-[13.5px]" style={{ color: "var(--ink-soft)" }}>
-          상품 사진 한 장이면 됩니다. 모델 · 배경 · 코디까지 자동으로 맞춘 커머스용 착용컷을 만들어
-          드립니다.
+          세금계산서 · 거래명세서 · 발주서를 읽어 ERP 입력용 데이터로 바꿉니다. 사업자번호 검증번호와
+          금액 정합성을 기계가 대조해, <strong>사람이 봐야 할 건만 골라냅니다.</strong>
         </p>
       </header>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        {/* 좌: 설정 패널 */}
-        <div className="card flex flex-col gap-6 p-5">
-          <Uploader images={images} onChange={setImages} />
-
-          <OptionGrid
-            title="상품 카테고리"
-            description="카테고리에 따라 보존할 디테일과 컷 구성이 달라집니다."
-            options={CATEGORIES}
-            value={categoryId}
-            onChange={setCategoryId}
-            columns={2}
+      <section
+        className="card p-4"
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); void addFiles(e.dataTransfer.files); }}
+      >
+        <div
+          className="rounded-lg border border-dashed px-4 py-7 text-center transition-colors"
+          style={{
+            borderColor: dragging ? "var(--brand)" : "var(--line)",
+            background: dragging ? "var(--brand-soft)" : "transparent",
+          }}
+        >
+          <p className="text-[13px]" style={{ color: "var(--ink-soft)" }}>
+            전표 파일(이미지 · PDF)을 끌어다 놓거나
+          </p>
+          <button type="button" className="btn mt-2" onClick={() => inputRef.current?.click()}>
+            파일 선택
+          </button>
+          <p className="mt-2 text-[11.5px]" style={{ color: "var(--ink-soft)" }}>
+            한 번에 최대 {MAX_FILES}건 · 건당 10MB
+          </p>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            multiple
+            hidden
+            onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }}
           />
+        </div>
 
-          <OptionGrid
-            title="모델"
-            description="타깃 고객층에 맞춰 고르세요."
-            options={MODELS}
-            value={modelId}
-            onChange={setModelId}
-            columns={2}
-          />
+        {notice ? (
+          <p className="mt-2 text-[12px]" style={{ color: "var(--warn)" }}>{notice}</p>
+        ) : null}
 
-          <OptionGrid
-            title="배경 · 분위기"
-            options={SCENES}
-            value={sceneId}
-            onChange={setSceneId}
-            columns={2}
-          />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border" style={{ borderColor: "var(--line)" }}>
+            {([
+              ["fast", "빠름", "대량 처리 · 저단가"],
+              ["accurate", "정밀", "흐린 스캔 · 복잡한 표"],
+            ] as const).map(([id, label, hint]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTier(id)}
+                className="px-3 py-1.5 text-left text-[12px]"
+                style={{
+                  background: tier === id ? "var(--brand-soft)" : "transparent",
+                  color: tier === id ? "var(--brand)" : "var(--ink-soft)",
+                  fontWeight: tier === id ? 700 : 500,
+                }}
+                title={hint}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-          <OptionGrid title="포즈 · 컷 구성" options={POSES} value={poseId} onChange={setPoseId} columns={2} />
-
-          <OptionGrid
-            title="출력 비율"
-            description="업로드할 채널에 맞는 비율을 고르세요."
-            options={ASPECT_RATIOS}
-            value={aspectRatio}
-            onChange={setAspectRatio}
-            columns={3}
-          />
-
-          <OptionGrid
-            title="품질"
-            description="메인컷은 고품질, 대량 생성은 빠름을 권장합니다."
-            options={QUALITY_TIERS.map((t) => ({ id: t.id, label: t.label, hint: t.hint }))}
-            value={quality}
-            onChange={setQuality}
-            columns={2}
-          />
-
-          <OptionGrid
-            title="해상도"
-            options={availableSizes}
-            value={effectiveSize}
-            onChange={setImageSize}
-            columns={3}
-          />
-
-          <section>
-            <div className="field-title">한 번에 만들 컷 수</div>
-            <div className="field-desc">여러 장을 뽑아 가장 좋은 컷을 고르는 방식을 권장합니다.</div>
-            <div className="mt-2.5 grid grid-cols-4 gap-2">
-              {[1, 2, 3, 4].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className="opt text-center"
-                  data-active={variations === n}
-                  onClick={() => setVariations(n)}
-                >
-                  <div className="opt-label text-center">{n}장</div>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <div className="field-title">추가 요청 (선택)</div>
-            <div className="field-desc">예: 소매를 걷어 올린 모습으로, 가을 느낌 톤으로</div>
-            <textarea
-              value={extra}
-              onChange={(e) => setExtra(e.target.value)}
-              rows={3}
-              placeholder="원하는 연출을 한국어로 적어주세요."
-              className="mt-2.5 w-full resize-y rounded-lg border px-3 py-2 text-[13px] outline-none"
-              style={{ borderColor: "var(--line)", background: "var(--surface)", color: "var(--ink)" }}
-            />
-          </section>
-
-          <div>
-            <button
-              type="button"
-              disabled={!canGenerate}
-              onClick={() => void handleGenerate()}
-              className="w-full rounded-xl py-3 text-[14px] font-bold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ background: "var(--brand)" }}
-            >
-              {loading ? "생성 중… (최대 2분)" : "착용컷 생성하기"}
+          <button type="button" className="btn" disabled={!pending || running} onClick={() => void runAll()}>
+            {running ? "판독 중…" : `판독 시작${pending ? ` (${rows.filter((r) => r.status !== "done").length}건)` : ""}`}
+          </button>
+          <button type="button" className="btn btn-ghost" disabled={!anyDone} onClick={downloadCsv}>
+            CSV 내보내기
+          </button>
+          {rows.length ? (
+            <button type="button" className="btn btn-ghost" onClick={() => setRows([])} disabled={running}>
+              전체 비우기
             </button>
-            {images.length === 0 ? (
-              <p className="mt-2 text-center text-[12px]" style={{ color: "var(--ink-soft)" }}>
-                상품 사진을 먼저 올려주세요.
-              </p>
-            ) : null}
-            {error ? (
-              <p className="mt-2 rounded-lg px-3 py-2 text-[12.5px]" style={{ background: "#fff5f5", color: "#c92a2a" }}>
-                {error}
-              </p>
-            ) : null}
-          </div>
+          ) : null}
         </div>
 
-        {/* 우: 결과. 설정 패널이 길어서 스크롤 중에도 결과가 보이도록 고정한다. */}
-        <div className="lg:sticky lg:top-6">
-          <div className="card max-h-[calc(100vh-3rem)] overflow-y-auto p-5">
-            <ResultGallery
-              images={results}
-              meta={meta}
-              prompt={prompt}
-              loading={loading}
-              variations={variations}
-              aspectRatio={aspectRatio}
-            />
+        {summary.total > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+            <span className="badge badge-auto">자동 승인 {summary.auto}</span>
+            <span className="badge badge-review">확인 권장 {summary.review}</span>
+            <span className="badge badge-reject">검토 필요 {summary.reject}</span>
+            {summary.failed ? <span className="badge badge-reject">판독 실패 {summary.failed}</span> : null}
           </div>
-        </div>
+        ) : null}
+      </section>
+
+      <div className="mt-5 flex flex-col gap-4">
+        {rows.map((row) => (
+          <VoucherCard key={row.id} row={row} onChange={handleEdit} />
+        ))}
       </div>
+
+      {rows.length === 0 ? (
+        <p className="mt-10 text-center text-[13px]" style={{ color: "var(--ink-soft)" }}>
+          전표를 올리면 여기에 판독 결과가 쌓입니다.
+        </p>
+      ) : null}
     </main>
   );
+}
+
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+function stamp() {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
 }
