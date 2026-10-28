@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #111318;
+  --color-ink-soft: #5b6170;
+  --color-line: #e4e6ec;
+  --color-surface: #ffffff;
+  --color-canvas: #f7f8fa;
+  --color-brand: #3b5bfd;
+  --color-brand-soft: #eef1ff;
+}
+
+:root {
+  --surface: #ffffff;
+  --canvas: #f7f8fa;
+  --ink: #111318;
+  --ink-soft: #5b6170;
+  --line: #e4e6ec;
+  --brand: #3b5bfd;
+  --brand-soft: #eef1ff;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #15171c;
+    --canvas: #0d0f13;
+    --ink: #f2f3f6;
+    --ink-soft: #9aa1b1;
+    --line: #272b33;
+    --brand: #7b92ff;
+    --brand-soft: #1b2140;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --surface: #15171c;
+  --canvas: #0d0f13;
+  --ink: #f2f3f6;
+  --ink-soft: #9aa1b1;
+  --line: #272b33;
+  --brand: #7b92ff;
+  --brand-soft: #1b2140;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+body {
+  font-family:
+    "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Roboto,
+    "Helvetica Neue", "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 프리셋 선택 카드 */
+.opt {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  cursor: pointer;
+}
+.opt:hover {
+  border-color: var(--brand);
+}
+.opt[data-active="true"] {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.opt-label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.opt-hint {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.field-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.field-desc {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
